@@ -3,9 +3,11 @@ package handlers
 import (
 	"fmt"
 	"github.com/lionslon/go-keepass/internal/auth"
+	"github.com/lionslon/go-keepass/internal/crypto"
 	"github.com/lionslon/go-keepass/internal/logger"
 	"github.com/lionslon/go-keepass/internal/models"
 	"github.com/lionslon/go-keepass/internal/storage"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -24,10 +26,21 @@ func NewKeeperHandler(storage *storage.KeeperStorage) KeeperHandler {
 func (m *KeeperHandler) Register(r *chi.Mux) {
 
 	r.Route("/api/user", func(r chi.Router) {
+		r.Use(crypto.Middleware)
 		//Регистрация нового пользователя
 		r.Post("/register", m.userRegister)
 		//Аутентификация существующего пользователя
 		r.Post("/login", m.login)
+	})
+
+	r.Route("/api/data/{id}", func(r chi.Router) {
+		r.Use(auth.Middleware)
+		//Добавление новых данных на сервер
+		r.Post("/", m.addNewData)
+		//Получение ранеее сохраненных данных с сервера
+		r.Get("/", m.getData)
+		//Удаление хранящихся на сервере данных
+		r.Delete("/", m.deleteData)
 	})
 }
 
@@ -94,4 +107,60 @@ func (m *KeeperHandler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Authorization", jwt)
+}
+
+func (m *KeeperHandler) addNewData(w http.ResponseWriter, r *http.Request) {
+
+	//Разобрали запрос
+	dataId := chi.URLParam(r, "id")
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		m.errorRespond(w, http.StatusBadRequest, fmt.Errorf("cannot read request body: %s", err))
+		return
+	}
+
+	//Забираем id пользователя из контекста
+	currentUser := r.Context().Value("user").(string)
+
+	//Добавляем данные в базу
+	err = m.storage.AddData(r.Context(), currentUser, dataId, data)
+	if err != nil {
+		m.errorRespond(w, http.StatusInternalServerError, fmt.Errorf("cannot decode data: %s", err))
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (m *KeeperHandler) getData(w http.ResponseWriter, r *http.Request) {
+
+	//Забираем id пользователя из контекста и идентификатор данных
+	currentUser := r.Context().Value("user").(string)
+	dataId := chi.URLParam(r, "id")
+
+	//Добавляем данные в базу
+	data, err := m.storage.GetData(r.Context(), currentUser, dataId)
+	if err != nil {
+		m.errorRespond(w, http.StatusInternalServerError, fmt.Errorf("cannot get user data: %s", err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "multipart/form-data")
+	w.Write(data)
+}
+
+func (m *KeeperHandler) deleteData(w http.ResponseWriter, r *http.Request) {
+
+	//Забираем id пользователя из контекста и идентификатор данных
+	currentUser := r.Context().Value("user").(string)
+	dataId := chi.URLParam(r, "id")
+
+	//Добавляем данные в базу
+	err := m.storage.DeleteData(r.Context(), currentUser, dataId)
+	if err != nil {
+		m.errorRespond(w, http.StatusInternalServerError, fmt.Errorf("cannot delete user data: %s", err))
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }

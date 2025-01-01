@@ -11,6 +11,9 @@ const (
 	checkUserExist = `SELECT COUNT(*) FROM users WHERE login = $1`
 	createUser     = `INSERT INTO users (login, password) VALUES($1,$2)`
 	getUser        = `SELECT id, password FROM users WHERE login = $1`
+	addData        = `INSERT INTO data (user_id, data_id, data) VALUES($1,$2, $3)`
+	getData        = `SELECT data FROM data WHERE user_id = $1 AND data_id = $2`
+	deleteData     = `DELETE FROM data WHERE user_id = $1 AND data_id = $2`
 )
 
 type KeeperStorage struct {
@@ -37,7 +40,7 @@ func (m *KeeperStorage) applyDBMigrations(ctx context.Context) error {
 	}
 
 	defer tx.Rollback()
-	// добавляем возможность генерации uuid
+	// это для возможности генерации uuid
 	_, err = tx.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`)
 	if err != nil {
 		return fmt.Errorf("cannot create uuid extension: %w", err)
@@ -61,16 +64,18 @@ func (m *KeeperStorage) applyDBMigrations(ctx context.Context) error {
 		CREATE TABLE IF NOT EXISTS data (
 			id uuid DEFAULT uuid_generate_v4 (),
 			user_id uuid,
-			identificator VARCHAR(255) NOT NULL,
+			data_id VARCHAR(255) NOT NULL,
 			data BYTEA,
 			PRIMARY KEY (id),
-			FOREIGN KEY (user_id) REFERENCES users(id)
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			UNIQUE (user_id, data_id)
 			)
     `)
 	if err != nil {
 		return fmt.Errorf("cannot create orders table: %w", err)
 	}
 
+	// коммитим транзакцию
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("cannot comit transaction: %w", err)
@@ -126,4 +131,37 @@ func (m *KeeperStorage) Login(ctx context.Context, dto models.AuthDTO) (string, 
 	}
 
 	return uuid, nil
+}
+
+func (m *KeeperStorage) AddData(ctx context.Context, userId string, dataId string, data []byte) error {
+
+	_, err := m.conn.ExecContext(ctx, addData, userId, dataId, data)
+	if err != nil {
+		return fmt.Errorf("cannot execute add new data: %w", err)
+	}
+
+	return nil
+}
+
+func (m *KeeperStorage) GetData(ctx context.Context, userId string, dataId string) ([]byte, error) {
+
+	var data []byte
+
+	row := m.conn.QueryRowContext(ctx, getData, userId, dataId)
+	err := row.Scan(&data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot scan data: %w", err)
+	}
+
+	return data, nil
+}
+
+func (m *KeeperStorage) DeleteData(ctx context.Context, userId string, dataId string) error {
+
+	_, err := m.conn.ExecContext(ctx, deleteData, userId, dataId)
+	if err != nil {
+		return fmt.Errorf("cannot execute delete user data: %w", err)
+	}
+
+	return nil
 }
