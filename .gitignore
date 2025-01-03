@@ -12,9 +12,7 @@
 *.out
 
 # Binaries
-cmd/agent/main
-cmd/agent/agent
-cmd/server/main
+cmd/client/client
 cmd/server/server
 
 # Dependency directories (remove the comment below to include it)

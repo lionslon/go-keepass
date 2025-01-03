@@ -3,7 +3,7 @@ package handlers
 import (
 	"fmt"
 	"github.com/lionslon/go-keepass/internal/auth"
-	"github.com/lionslon/go-keepass/internal/crypto"
+	"github.com/lionslon/go-keepass/internal/crypt"
 	"github.com/lionslon/go-keepass/internal/logger"
 	"github.com/lionslon/go-keepass/internal/models"
 	"github.com/lionslon/go-keepass/internal/storage"
@@ -26,7 +26,7 @@ func NewKeeperHandler(storage *storage.KeeperStorage) KeeperHandler {
 func (m *KeeperHandler) Register(r *chi.Mux) {
 
 	r.Route("/api/user", func(r chi.Router) {
-		r.Use(crypto.Middleware)
+		r.Use(crypt.Middleware)
 		//Регистрация нового пользователя
 		r.Post("/register", m.userRegister)
 		//Аутентификация существующего пользователя
