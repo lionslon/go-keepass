@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lionslon/go-keepass/internal/auth"
 	"github.com/lionslon/go-keepass/internal/deadline"
 	"github.com/lionslon/go-keepass/internal/logger"
 	"github.com/lionslon/go-keepass/internal/server/config"
+	"github.com/lionslon/go-keepass/internal/server/handlers"
+	"github.com/lionslon/go-keepass/internal/storage"
 	"log"
 	"net/http"
 	"os/signal"
@@ -25,14 +28,20 @@ type App struct {
 	notifyStop context.CancelFunc
 }
 
-func Create(cfg *config.Config) (*App, error) {
+func Create(cfg *config.Config, storage *storage.KeeperStorage) (*App, error) {
 
-	//Регистрируем хэндлеры в роутере
+	// Инициализируем объект для создания/проверки jwt
+	auth.Initialize(cfg)
+	// Регистрируем хэндлеры в роутере
 	router := chi.NewRouter()
-	//Подключаем middleware логирования
+	// Подключаем middleware логирования
 	router.Use(logger.Middleware)
-	//Подключаем middleware deadline context
+	// Подключаем middleware deadline context
 	router.Use(deadline.Middleware)
+	// Подключаем storage
+	keeperHandler := handlers.NewKeeperHandler(storage)
+	// Регистрируем роутер
+	keeperHandler.Register(router)
 
 	return &App{
 		server: &http.Server{
